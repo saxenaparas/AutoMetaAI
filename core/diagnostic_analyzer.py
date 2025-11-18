@@ -7,16 +7,16 @@ class DiagnosticAnalyzer:
     def __init__(self):
         self.issues = defaultdict(list)
     
-    def compare_predictions(self, original_file, balanced_file, verified_file):
-        """Compare original vs balanced predictions to find what broke"""
-        print("🔍 DIAGNOSTIC ANALYSIS: What broke between original and balanced?")
+    def compare_all_versions(self, original_file, original_plus_file, verified_file):
+        """Compare Original vs Original+ vs Ground Truth"""
+        print("🔍 COMPARING ALL VERSIONS: Original vs Original+ vs Ground Truth")
         
         # Check if files exist
         if not os.path.exists(original_file):
             print(f"❌ Original file not found: {original_file}")
             return
-        if not os.path.exists(balanced_file):
-            print(f"❌ Balanced file not found: {balanced_file}")
+        if not os.path.exists(original_plus_file):
+            print(f"❌ Original+ file not found: {original_plus_file}")
             return
         if not os.path.exists(verified_file):
             print(f"❌ Verified file not found: {verified_file}")
@@ -24,32 +24,39 @@ class DiagnosticAnalyzer:
         
         # Read all files
         orig_df = pd.read_excel(original_file)
-        bal_df = pd.read_excel(balanced_file)
+        orig_plus_df = pd.read_excel(original_plus_file)
         true_df = pd.read_excel(verified_file)
         
         # Get common columns across all files
-        common_columns = set(orig_df.columns) & set(bal_df.columns) & set(true_df.columns)
+        common_columns = set(orig_df.columns) & set(orig_plus_df.columns) & set(true_df.columns)
         common_columns = [col for col in common_columns if col not in ['dataTagId', 'description']]
         
         print(f"📊 Comparing {len(common_columns)} common columns across {len(orig_df)} rows")
+        print(f"📁 Files:")
+        print(f"   • Original: {original_file}")
+        print(f"   • Original+: {original_plus_file}")
+        print(f"   • Ground Truth: {verified_file}")
         
-        # Merge on dataTagId
+        # Merge all files
         orig_merged = pd.merge(orig_df, true_df, on='dataTagId', suffixes=('_pred', '_true'))
-        bal_merged = pd.merge(bal_df, true_df, on='dataTagId', suffixes=('_pred', '_true'))
+        orig_plus_merged = pd.merge(orig_plus_df, true_df, on='dataTagId', suffixes=('_pred', '_true'))
+        
+        print(f"\n🎯 ACCURACY COMPARISON:")
+        print(f"{'Column':<25} {'Original':<10} {'Original+':<10} {'Difference':<12}")
+        print("-" * 60)
         
         for col in common_columns:
             orig_correct = 0
-            bal_correct = 0
+            orig_plus_correct = 0
             total = 0
             
             for idx in range(len(orig_merged)):
-                # Safely get values with error handling
+                # Safely get values
                 try:
                     orig_val = orig_merged.iloc[idx][f'{col}_pred']
-                    bal_val = bal_merged.iloc[idx][f'{col}_pred']
+                    orig_plus_val = orig_plus_merged.iloc[idx][f'{col}_pred']
                     true_val = orig_merged.iloc[idx][f'{col}_true']
                 except KeyError:
-                    # Skip if column doesn't exist in merged data
                     continue
                 
                 if pd.notna(true_val) and true_val not in ['', '-', 'Unassigned']:
@@ -59,46 +66,46 @@ class DiagnosticAnalyzer:
                     if self._values_equal(orig_val, true_val):
                         orig_correct += 1
                     
-                    # Check balanced
-                    if self._values_equal(bal_val, true_val):
-                        bal_correct += 1
+                    # Check original+
+                    if self._values_equal(orig_plus_val, true_val):
+                        orig_plus_correct += 1
                     else:
-                        # Record what went wrong
-                        if pd.notna(orig_val) and self._values_equal(orig_val, true_val):
-                            self.issues[col].append(f"Changed from correct '{orig_val}' to wrong '{bal_val}'")
+                        # Record what changed from original to original+
+                        if pd.notna(orig_val) and self._values_equal(orig_val, true_val) and not self._values_equal(orig_plus_val, true_val):
+                            self.issues[col].append(f"Was correct '{orig_val}' → now wrong '{orig_plus_val}'")
             
-            if total > 0:  # Only show columns with data
+            if total > 0:
                 orig_acc = (orig_correct / total * 100)
-                bal_acc = (bal_correct / total * 100)
+                orig_plus_acc = (orig_plus_correct / total * 100)
+                difference = orig_plus_acc - orig_acc
                 
-                if bal_acc < orig_acc - 5:  # Significant regression
-                    print(f"❌ {col}: {orig_acc:.1f}% → {bal_acc:.1f}% (REGression: -{orig_acc-bal_acc:.1f}%)")
-                elif bal_acc > orig_acc + 5:  # Significant improvement
-                    print(f"✅ {col}: {orig_acc:.1f}% → {bal_acc:.1f}% (IMPROVEMENT: +{bal_acc-orig_acc:.1f}%)")
+                if difference > 5:
+                    print(f"✅ {col:<23} {orig_acc:>6.1f}%    {orig_plus_acc:>6.1f}%    +{difference:>5.1f}%")
+                elif difference < -5:
+                    print(f"❌ {col:<23} {orig_acc:>6.1f}%    {orig_plus_acc:>6.1f}%    {difference:>6.1f}%")
                 else:
-                    print(f"➖ {col}: {orig_acc:.1f}% → {bal_acc:.1f}%")
+                    print(f"➖ {col:<23} {orig_acc:>6.1f}%    {orig_plus_acc:>6.1f}%    {difference:>6.1f}%")
     
-    def analyze_instance_columns(self, balanced_file, verified_file):
-        """Specifically analyze why instance columns broke"""
-        print(f"\n🔧 ANALYZING INSTANCE COLUMNS:")
+    def analyze_improvements_and_regressions(self, original_plus_file, verified_file):
+        """Show specific improvements and regressions in Original+"""
+        print(f"\n🔍 DETAILED ANALYSIS: What improved/regressed in Original+")
         
-        if not os.path.exists(balanced_file) or not os.path.exists(verified_file):
-            print("❌ Files not found for instance analysis")
+        if not os.path.exists(original_plus_file) or not os.path.exists(verified_file):
+            print("❌ Files not found for detailed analysis")
             return
             
-        bal_df = pd.read_excel(balanced_file)
+        orig_plus_df = pd.read_excel(original_plus_file)
         true_df = pd.read_excel(verified_file)
         
-        # Get common columns
-        common_columns = set(bal_df.columns) & set(true_df.columns)
-        instance_cols = ['systemInstance', 'equipmentInstance', 'componentInstance', 'subcomponentInstance']
-        instance_cols = [col for col in instance_cols if col in common_columns]
+        merged = pd.merge(orig_plus_df, true_df, on='dataTagId', suffixes=('_pred', '_true'))
         
-        merged = pd.merge(bal_df, true_df, on='dataTagId', suffixes=('_pred', '_true'))
+        # Show improvements (where Original+ fixed previous issues)
+        print(f"\n📈 POTENTIAL IMPROVEMENTS in Original+:")
+        improvement_found = False
         
-        for col in instance_cols:
-            print(f"\n📊 {col}:")
-            wrong_count = 0
+        for col in ['measureLocation', 'measureLocationName', 'measureProperty', 'measureType']:
+            print(f"\n   📊 {col}:")
+            correct_count = 0
             total = 0
             
             for idx in range(len(merged)):
@@ -110,67 +117,68 @@ class DiagnosticAnalyzer:
                 
                 if pd.notna(true_val) and true_val not in ['', '-', 'Unassigned']:
                     total += 1
-                    if not self._values_equal(pred_val, true_val):
-                        wrong_count += 1
-                        if wrong_count <= 3:  # Show only first 3 errors
+                    if self._values_equal(pred_val, true_val):
+                        correct_count += 1
+                        # Show some correct predictions that might be new
+                        if correct_count <= 2 and pd.notna(pred_val):
                             desc = merged.iloc[idx].get('description_pred', '')
-                            print(f"   ❌ Row {idx}: predicted '{pred_val}' but should be '{true_val}'")
-                            if desc:
-                                print(f"      Description: {desc}")
+                            if 'I/L' in desc or 'O/L' in desc or 'SUCTION' in desc or 'DISCH' in desc:
+                                print(f"      ✅ Correct: '{pred_val}' for '{desc}'")
+                                improvement_found = True
             
             if total > 0:
-                accuracy = ((total - wrong_count) / total * 100)
-                print(f"   Accuracy: {accuracy:.1f}% ({total - wrong_count}/{total} correct)")
-            else:
-                print(f"   No data to compare")
+                accuracy = (correct_count / total * 100)
+                print(f"      Accuracy: {accuracy:.1f}%")
+        
+        if not improvement_found:
+            print("      No clear improvements detected")
+        
+        # Show regressions
+        print(f"\n📉 POTENTIAL REGRESSIONS in Original+:")
+        regression_found = False
+        
+        for col, issues in self.issues.items():
+            if issues:
+                print(f"\n   ❌ {col}:")
+                for issue in issues[:3]:  # Show first 3 issues
+                    print(f"      {issue}")
+                    regression_found = True
+        
+        if not regression_found:
+            print("      No major regressions detected")
     
-    def check_pattern_files(self):
-        """Check what changed in pattern files"""
-        print(f"\n📁 PATTERN FILE COMPARISON:")
+    def check_original_patterns(self):
+        """Check the original pattern file"""
+        print(f"\n📁 ORIGINAL PATTERN ANALYSIS:")
         
-        original_file = os.path.join(os.path.dirname(__file__), '..', 'data', 'pattern_knowledge.json')
-        balanced_file = os.path.join(os.path.dirname(__file__), '..', 'data', 'pattern_knowledge_balanced.json')
+        pattern_file = os.path.join(os.path.dirname(__file__), '..', 'data', 'pattern_knowledge.json')
         
-        if not os.path.exists(original_file):
-            print(f"❌ Original pattern file not found: {original_file}")
-            return
-        if not os.path.exists(balanced_file):
-            print(f"❌ Balanced pattern file not found: {balanced_file}")
+        if not os.path.exists(pattern_file):
+            print(f"❌ Pattern file not found: {pattern_file}")
             return
         
-        with open(original_file, 'r') as f:
-            orig_patterns = json.load(f)
+        with open(pattern_file, 'r') as f:
+            patterns = json.load(f)
         
-        with open(balanced_file, 'r') as f:
-            bal_patterns = json.load(f)
+        # Check key patterns we care about
+        key_columns = ['measureLocation', 'measureLocationName', 'measureType', 'measureProperty']
         
-        # Check instance columns
-        instance_cols = ['systemInstance', 'equipmentInstance', 'componentInstance', 'subcomponentInstance']
-        
-        for col in instance_cols:
+        for col in key_columns:
             print(f"\n📊 {col} patterns:")
-            
-            if col in orig_patterns and col in bal_patterns:
-                orig_count = len(orig_patterns[col])
-                bal_count = len(bal_patterns[col])
-                print(f"   Original: {orig_count} patterns")
-                print(f"   Balanced: {bal_count} patterns")
+            if col in patterns:
+                count = len(patterns[col])
+                print(f"   Total patterns: {count}")
                 
-                # Check if patterns changed
-                different_patterns = 0
-                for word in orig_patterns[col]:
-                    if word in bal_patterns[col]:
-                        if orig_patterns[col][word]['value'] != bal_patterns[col][word]['value']:
-                            different_patterns += 1
-                            print(f"   🔄 '{word}': '{orig_patterns[col][word]['value']}' → '{bal_patterns[col][word]['value']}'")
+                # Show some relevant patterns
+                relevant_patterns = []
+                for word, data in patterns[col].items():
+                    if any(keyword in word for keyword in ['I/L', 'O/L', 'SUCTION', 'DISCH', 'TEMP', 'PRESS']):
+                        relevant_patterns.append((word, data))
                 
-                if different_patterns == 0:
-                    print(f"   ✅ No pattern value changes")
+                for word, data in relevant_patterns[:5]:  # Show top 5
+                    print(f"   '{word}' → '{data['value']}' (conf: {data['confidence']})")
             else:
-                if col not in orig_patterns:
-                    print(f"   ❌ Column not in original patterns")
-                if col not in bal_patterns:
-                    print(f"   ❌ Column not in balanced patterns")
+                print(f"   No patterns found for this column")
     
     def _values_equal(self, val1, val2):
         """Flexible value comparison"""
@@ -197,21 +205,21 @@ def main():
     # Use ABSOLUTE paths
     base_dir = os.path.dirname(__file__)
     original_file = os.path.join(base_dir, '..', 'data', 'output', 'PREDICTED_sample_data.xlsx')
-    balanced_file = os.path.join(base_dir, '..', 'data', 'output_balanced', 'BALANCED_sample_data.xlsx')
+    original_plus_file = os.path.join(base_dir, '..', 'data', 'output_original_plus', 'ORIGINAL_PLUS_sample_data.xlsx')
     verified_file = os.path.join(base_dir, '..', 'data', 'verification', 'Filled_Sample_Data_For_Verification.xlsx')
     
-    print("🎯 RUNNING COMPREHENSIVE DIAGNOSTIC...")
+    print("🎯 RUNNING ORIGINAL vs ORIGINAL+ DIAGNOSTIC...")
     
-    # Step 1: Compare predictions
-    diagnostic.compare_predictions(original_file, balanced_file, verified_file)
+    # Step 1: Compare all versions
+    diagnostic.compare_all_versions(original_file, original_plus_file, verified_file)
     
-    # Step 2: Analyze instance columns specifically
-    diagnostic.analyze_instance_columns(balanced_file, verified_file)
+    # Step 2: Analyze improvements and regressions
+    diagnostic.analyze_improvements_and_regressions(original_plus_file, verified_file)
     
-    # Step 3: Check pattern files
-    diagnostic.check_pattern_files()
+    # Step 3: Check original patterns
+    diagnostic.check_original_patterns()
     
-    print(f"\n💡 RECOMMENDATION: Let's revert to original patterns and incrementally improve")
+    print(f"\n💡 FINAL ASSESSMENT: See if Original+ maintained or improved on 44.4% accuracy")
 
 if __name__ == "__main__":
     main()
