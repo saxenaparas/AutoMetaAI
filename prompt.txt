@@ -1,0 +1,6 @@
+python core/pattern_analyzer.py                                                     
+python core/predictor.py       
+python core/predictor_original_plus.py
+python core/verifier.py
+python core/verifier_orignal_plus.py
+python core/diagnostic_analyzer.py
