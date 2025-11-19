@@ -11,24 +11,15 @@ class PatternThinker:
             'word_mappings': {},
             'conditional_rules': [],
             'priority_rules': [],
-            'hierarchical_patterns': {},
-            'negative_patterns': {},  # NEW: Patterns to avoid
-            'confidence_adjustments': {}  # NEW: Adjust confidence based on errors
+            'hierarchical_patterns': {}
         }
-        self.iteration = 0
     
-    def analyze_training_data(self, training_dir, feedback_data=None):
-        """Deep analysis to discover complex patterns with feedback learning"""
-        self.iteration += 1
-        print(f"THINKING: Analyzing training data for patterns (Iteration {self.iteration})...")
+    def analyze_training_data(self, training_dir):
+        """Deep analysis to discover complex patterns"""
+        print("THINKING: Analyzing training data for patterns...")
         
         # Load all training files
         all_data = self._load_all_training_data(training_dir)
-        
-        # Apply feedback from previous errors
-        if feedback_data:
-            print("   Applying feedback from previous errors...")
-            all_data = self._apply_feedback(all_data, feedback_data)
         
         # Discover different types of patterns
         self._discover_column_relationships(all_data)
@@ -36,47 +27,18 @@ class PatternThinker:
         self._discover_conditional_rules(all_data)
         self._discover_priority_rules(all_data)
         self._discover_hierarchical_patterns(all_data)
-        self._discover_negative_patterns(all_data)  # NEW: What NOT to predict
         
         return self.rules
-    
-    def _apply_feedback(self, data, feedback_data):
-        """Apply feedback from verification errors to improve patterns"""
-        # This is a simplified version - in practice, you'd want more sophisticated feedback application
-        print(f"      Processing {len(feedback_data.get('errors', []))} feedback items")
-        
-        for error in feedback_data.get('errors', []):
-            # Lower confidence for patterns that caused errors
-            col = error['column']
-            wrong_value = error['predicted']
-            description = error['description']
-            
-            words = description.upper().split()
-            for word in words:
-                pattern_key = f"{col}::{word}::{wrong_value}"
-                if pattern_key not in self.rules['confidence_adjustments']:
-                    self.rules['confidence_adjustments'][pattern_key] = 0
-                self.rules['confidence_adjustments'][pattern_key] -= 1  # Penalize wrong patterns
-        
-        return data
     
     def _discover_column_relationships(self, data):
         """Discover * and + relationships between columns"""
         print("   Analyzing column relationships...")
         
-        # Clear previous relationships
-        self.rules['column_relationships'] = {}
-        
         # systemName = system *
         system_matches = sum(1 for row in data if self._safe_compare(row.get('system'), row.get('systemName')))
         system_total = sum(1 for row in data if row.get('system') and row.get('systemName'))
         if system_total > 0 and system_matches / system_total > 0.8:
-            self.rules['column_relationships']['systemName'] = {
-                'type': 'equals', 
-                'source': 'system', 
-                'confidence': system_matches/system_total,
-                'notation': '*'
-            }
+            self.rules['column_relationships']['systemName'] = {'type': 'equals', 'source': 'system', 'confidence': system_matches/system_total}
         
         # equipmentName = equipment +
         equipment_plus = self._analyze_plus_relationship(data, 'equipment', 'equipmentName')
@@ -85,12 +47,9 @@ class PatternThinker:
             
         # Add instance relationships (usually "1" or "1.0")
         self._analyze_instance_relationships(data)
-        
-        # NEW: Discover more column relationships
-        self._discover_measurement_relationships(data)
     
     def _discover_word_mappings(self, data):
-        """Discover word -> value mappings with confidence, applying feedback adjustments"""
+        """Discover word -> value mappings with confidence"""
         print("   Analyzing word mappings...")
         
         word_mappings = defaultdict(Counter)
@@ -105,103 +64,55 @@ class PatternThinker:
                     for word in words:
                         word_mappings[(col, word)][safe_value] += 1
         
-        # Convert to confidence scores with feedback adjustments
-        for (col, word), value_counts in word_mappings.items():
-            total = sum(value_counts.values())
-            if total >= 2:  # Only consider patterns with at least 2 occurrences
-                for value, count in value_counts.items():
-                    confidence = count / total
-                    
-                    # Apply feedback adjustments
-                    pattern_key = f"{col}::{word}::{value}"
-                    if pattern_key in self.rules['confidence_adjustments']:
-                        adjustment = self.rules['confidence_adjustments'][pattern_key]
-                        confidence = max(0.1, confidence + (adjustment * 0.1))  # Adjust confidence
-                    
-                    if confidence >= 0.7:  # 70% confidence threshold
-                        if col not in self.rules['word_mappings']:
-                            self.rules['word_mappings'][col] = {}
-                        
-                        # Only keep the highest confidence mapping for each word
-                        if word not in self.rules['word_mappings'][col] or confidence > self.rules['word_mappings'][col][word]['confidence']:
-                            self.rules['word_mappings'][col][word] = {
-                                'value': value,
-                                'confidence': round(confidence, 3),
-                                'occurrences': count
-                            }
+        # Convert to confidence scores
+        for (col, word), counts in word_mappings.items():
+            total = sum(counts.values())
+            if total >= 2:  # Minimum occurrences
+                best_value, best_count = counts.most_common(1)[0]
+                confidence = best_count / total
+                if confidence >= 0.7:
+                    if col not in self.rules['word_mappings']:
+                        self.rules['word_mappings'][col] = {}
+                    self.rules['word_mappings'][col][word] = {
+                        'value': best_value,
+                        'confidence': confidence,
+                        'occurrences': best_count
+                    }
     
     def _discover_conditional_rules(self, data):
         """Discover if-then rules like 'if TEMP then measureType=Temperature'"""
         print("   Discovering conditional rules...")
         
-        # Clear previous rules
-        self.rules['conditional_rules'] = []
-        
         # Temperature rules
-        temp_keywords = ['TEMP', 'TMP', 'TEMPERATURE']
-        temp_rows = [r for r in data if any(kw in self._safe_str(r.get('description', '')).upper() for kw in temp_keywords)]
+        temp_rows = [r for r in data if 'TEMP' in self._safe_str(r.get('description', '')).upper()]
         if temp_rows:
             temp_type_matches = sum(1 for r in temp_rows if self._safe_compare(r.get('measureType'), 'Temperature'))
             if len(temp_rows) > 5 and temp_type_matches / len(temp_rows) > 0.9:
                 self.rules['conditional_rules'].append({
-                    'condition': {'description_contains': temp_keywords},
+                    'condition': {'description_contains': ['TEMP', 'TMP', 'TEMPERATURE']},
                     'then': {'measureType': 'Temperature'},
                     'confidence': temp_type_matches / len(temp_rows),
                     'priority': 1
                 })
         
         # Pressure rules
-        press_keywords = ['PRESS', 'PRESSURE', 'PR']
-        press_rows = [r for r in data if any(kw in self._safe_str(r.get('description', '')).upper() for kw in press_keywords)]
+        press_rows = [r for r in data if any(word in self._safe_str(r.get('description', '')).upper() 
+                                           for word in ['PRESS', 'PRESSURE', 'PR'])]
         if press_rows:
             press_type_matches = sum(1 for r in press_rows if self._safe_compare(r.get('measureType'), 'Pressure'))
             if len(press_rows) > 5 and press_type_matches / len(press_rows) > 0.9:
                 self.rules['conditional_rules'].append({
-                    'condition': {'description_contains': press_keywords},
+                    'condition': {'description_contains': ['PRESS', 'PRESSURE', 'PR']},
                     'then': {'measureType': 'Pressure'},
                     'confidence': press_type_matches / len(press_rows),
                     'priority': 1
-                })
-        
-        # NEW: Location rules based on common errors
-        self._discover_location_rules(data)
-    
-    def _discover_location_rules(self, data):
-        """Discover rules for measureLocation based on common patterns"""
-        print("   Discovering location rules...")
-        
-        # I/L -> Inlet
-        il_rows = [r for r in data if 'I/L' in self._safe_str(r.get('description', '')).upper()]
-        if il_rows:
-            il_matches = sum(1 for r in il_rows if self._safe_compare(r.get('measureLocation'), 'Inlet'))
-            if len(il_rows) > 3 and il_matches / len(il_rows) > 0.8:
-                self.rules['conditional_rules'].append({
-                    'condition': {'description_contains': ['I/L']},
-                    'then': {'measureLocation': 'Inlet', 'measureLocationName': 'Inlet'},
-                    'confidence': il_matches / len(il_rows),
-                    'priority': 2
-                })
-        
-        # O/L -> Outlet
-        ol_rows = [r for r in data if 'O/L' in self._safe_str(r.get('description', '')).upper()]
-        if ol_rows:
-            ol_matches = sum(1 for r in ol_rows if self._safe_compare(r.get('measureLocation'), 'Outlet'))
-            if len(ol_rows) > 3 and ol_matches / len(ol_rows) > 0.8:
-                self.rules['conditional_rules'].append({
-                    'condition': {'description_contains': ['O/L']},
-                    'then': {'measureLocation': 'Outlet', 'measureLocationName': 'Outlet'},
-                    'confidence': ol_matches / len(ol_rows),
-                    'priority': 2
                 })
     
     def _discover_priority_rules(self, data):
         """Discover priority rules like 'temp %' -> '% has priority'"""
         print("   Discovering priority rules...")
         
-        # Clear previous rules
-        self.rules['priority_rules'] = []
-        
-        # Percentage over temperature
+        # This is a simplified version - would need more complex analysis
         self.rules['priority_rules'].append({
             'name': 'percentage_over_temperature',
             'conditions': [
@@ -216,9 +127,6 @@ class PatternThinker:
         """Discover equipment -> system -> component hierarchies"""
         print("   Discovering hierarchical patterns...")
         
-        # Clear previous patterns
-        self.rules['hierarchical_patterns'] = {}
-        
         # Group by equipment and analyze system patterns
         equipment_systems = defaultdict(Counter)
         for row in data:
@@ -231,53 +139,6 @@ class PatternThinker:
             if len(systems) == 1:  # Consistent mapping
                 system = systems.most_common(1)[0][0]
                 self.rules['hierarchical_patterns'][equipment] = {'system': system}
-    
-    def _discover_negative_patterns(self, data):
-        """Discover patterns that should NOT be applied (based on common errors)"""
-        print("   Discovering negative patterns...")
-        
-        # Clear previous negative patterns
-        self.rules['negative_patterns'] = {}
-        
-        # Analyze cases where certain patterns lead to wrong predictions
-        # For now, we'll add some common error patterns based on your verification results
-        
-        # Don't predict 'Bearing' for subcomponent if description doesn't have clear bearing context
-        self.rules['negative_patterns']['subcomponent'] = {
-            'conditions': [
-                {'description_contains': ['TEMP', 'PRES']},  # Temperature/pressure readings
-                {'description_not_contains': ['BRG', 'BEARING']}  # But no bearing context
-            ],
-            'action': 'skip_prediction'
-        }
-    
-    def _discover_measurement_relationships(self, data):
-        """Discover relationships between measurement types and units"""
-        print("   Discovering measurement relationships...")
-        
-        # Temperature -> Degc
-        temp_rows = [r for r in data if self._safe_compare(r.get('measureType'), 'Temperature')]
-        if temp_rows:
-            degc_matches = sum(1 for r in temp_rows if self._safe_compare(r.get('measureUnit'), 'Degc'))
-            if len(temp_rows) > 10 and degc_matches / len(temp_rows) > 0.9:
-                self.rules['column_relationships']['measureUnit_temp'] = {
-                    'type': 'conditional_default',
-                    'condition': {'measureType': 'Temperature'},
-                    'value': 'Degc',
-                    'confidence': degc_matches / len(temp_rows)
-                }
-        
-        # Pressure -> Kg/Cm2
-        pressure_rows = [r for r in data if self._safe_compare(r.get('measureType'), 'Pressure')]
-        if pressure_rows:
-            pressure_unit_matches = sum(1 for r in pressure_rows if self._safe_compare(r.get('measureUnit'), 'Kg/Cm2'))
-            if len(pressure_rows) > 10 and pressure_unit_matches / len(pressure_rows) > 0.8:
-                self.rules['column_relationships']['measureUnit_pressure'] = {
-                    'type': 'conditional_default',
-                    'condition': {'measureType': 'Pressure'},
-                    'value': 'Kg/Cm2',
-                    'confidence': pressure_unit_matches / len(pressure_rows)
-                }
     
     def _analyze_plus_relationship(self, data, source_col, target_col):
         """Analyze + relationships (minor modifications)"""
@@ -300,12 +161,7 @@ class PatternThinker:
                     continue
         
         if len(matches) > 10:  # Significant pattern
-            return {
-                'type': 'plus', 
-                'source': source_col, 
-                'confidence': len(matches)/len(data),
-                'notation': '+'
-            }
+            return {'type': 'plus', 'source': source_col, 'confidence': len(matches)/len(data)}
         return None
     
     def _analyze_instance_relationships(self, data):
@@ -382,7 +238,6 @@ def main():
     print(f"   Conditional Rules: {len(rules['conditional_rules'])}")
     print(f"   Priority Rules: {len(rules['priority_rules'])}")
     print(f"   Hierarchical Patterns: {len(rules['hierarchical_patterns'])}")
-    print(f"   Negative Patterns: {len(rules['negative_patterns'])}")
 
 if __name__ == "__main__":
     main()

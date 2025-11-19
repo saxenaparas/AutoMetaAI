@@ -1,39 +1,7 @@
 python core/pattern_analyzer.py                                                     
 python core/predictor.py       
-python core/predictor_original_plus.py
 python core/verifier.py
-python core/verifier_original_plus.py
 python core/diagnostic_analyzer.py
 
-
-this is the terminal output:
-```
-PS D:\Projects\AutoMetaAI> python core/improvement_engine.py
-STARTING ENHANCED THINKING & IMPROVEMENT MODE
-============================================================
-ITERATION 1
-----------------------------------------
-   STEP 1: Thinking with feedback...
-THINKING: Analyzing training data for patterns (Iteration 1)...
-     
-[its too long so i skipped it intestinally]
-
-============================================================
-FINAL IMPROVEMENT REPORT
-============================================================
-Initial Accuracy: 47.9%
-Final Accuracy: 47.9%
-Total Improvement: +0.0%
-Best Accuracy: 47.9%
-Iterations Completed: 5
-
-ITERATION HISTORY:
-   Iteration 1: 47.9% (Δ+47.9%)
-   Iteration 2: 47.9%
-   Iteration 3: 47.9%
-   Iteration 4: 47.9%
-   Iteration 5: 47.9%
-PS D:\Projects\AutoMetaAI> 
-```
-I have not mentioned the middle part but see this so , now fix the issue.
-please no issue take time but provide me a accurate, precise, and correct code for this issue and fulfilling our project goal, go!!!
+python core/improvement_engine.py
+python core/active_learning_engine.py
