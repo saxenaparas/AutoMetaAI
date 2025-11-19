@@ -119,6 +119,29 @@ class PredictionVerifier:
         for pattern, count in incorrect_patterns.most_common(10):
             print(f"   {pattern} (wrong {count} times)")
 
+    def verify_predictions_with_details(self, predicted_file, verified_file):
+        """Enhanced verification that returns detailed results for learning"""
+        accuracy = self.verify_predictions(predicted_file, verified_file)
+        
+        detailed_results = {
+            'accuracy': accuracy,
+            'common_errors': [],
+            'missing_patterns': [],
+            'incorrect_predictions': self.incorrect_predictions
+        }
+        
+        # Extract common error patterns
+        error_patterns = Counter()
+        for error in self.incorrect_predictions:
+            pattern = f"{error['column']}: {error['predicted']} -> {error['actual']}"
+            error_patterns[pattern] += 1
+        
+        for pattern, count in error_patterns.most_common(5):
+            detailed_results['common_errors'].append(f"{pattern} ({count}x)")
+        
+        return accuracy, detailed_results
+
+
 def main():
     verifier = PredictionVerifier()
     

@@ -1,0 +1,151 @@
+ok so, lets think from the begining and understand this i want to find the relations, pattern and logic by analyzing these xlsx files which i am going to give you one by one and then provide me the `.json` or in anyother format which you feel most best suitable to handle these complex patterns, relations, logic or rules and in that file contains that pattern, rules, or logic in it.
+
+For example this is the logic, pattern, rules or relations which i found till now you can see them:
+```
+Now, [*] means exceptions are their in some cases otherwise, whatever the condition mentioned it holds that value in most of the cases. Example: `systemName = system *` means value in `systemName` is by default in most of the cases is equal to `system` but in some cases it can be different.
+Similarly, [+] denotes just minor changes/ additions (either a prefix or suffix or both), Example: `equipmentName = equipment +` means let's say `equipment` value be `Condenser` so, `equipmentName` value can be `Condenser-A` (depending on the description), i.e. `-A` is just an addition to the `equipment` value, So, means in most of the cases value in `equipmentName` is equal to `equipment` only but in some cases it contains an addon to the `equipment` value.
+
+So, some Conditions, logic, pattern, rules or relations which i found till now are:
+=========================================
+
+systemName = system *
+systemInstance = 1 *
+
+equipmentName = equipment +
+equipmentInstance = 1 *
+
+componentName = component +
+componentInstance = 1 *
+
+subcomponentName = subcomponent +
+subcomponentInstance = 1 *
+
+measureLocationName = measureLocation +
+measureLocationInstance = 1 *
+
+address = [PMS_value] + dataTagId
+
+[PMS_value] => this can be taken as input from the user or provided by the user and remains same throughtout the whole table. 
+=========================================
+
+
+Now, comes the Logic Mapping part,
+Here, Disc means Discription,
+So, these are the Logic Mappings:
+=========================================
+if Disc contains "temp" or "tmp" or "temperature" words then:
+    measureType = Temperature
+    measureUnit = Degc
+
+if Disc contains "%" or "percent" words then:
+    measureType = percent
+
+if Disc contains "intensity" or "" or "" words then:
+    measureType = Intensity
+    measureUnit = %
+
+if Disc contains "O2" words then:
+    measureType = O2	
+    measureUnit = %
+
+if Disc contains "LTSH" words then:
+    system      = Boiler
+    systemName  = pcfb
+    equipment   = equipmentName = LTSH
+
+if "METAL" word then:
+    measureProperty = Metal
+
+Now, their are many relations and even some holds more priority than other like if `temp %` is used in the desc then `%` holds more piority than `temp` so, `measureType` will be `Temperature` only but `measureUnit` will be `%` not `Degc`.
+=========================================
+
+```
+Their can be way more conditions, logic, pattern, rules or relations are possible!
+These are some simple ones but their can be more complex, nested, conditions, logic, pattern, rules or relations are possible.
+
+ok now this is the Github Repo link for the project:
+`https://github.com/saxenaparas/AutoMetaAI`.
+
+also one more thing i added a: `diagnostic_analyzer.py`,
+
+which give these results:
+```
+diagnostic_analyzer.py >> 🎯 RUNNING ORIGINAL vs ORIGINAL+ DIAGNOSTIC...
+🔍 COMPARING ALL VERSIONS: Original vs Original+ vs Ground Truth
+📊 Comparing 18 common columns across 34 rows
+📁 Files:
+   • Original: D:\Projects\AutoMetaAI\core\..\data\output\PREDICTED_sample_data.xlsx
+   • Original+: D:\Projects\AutoMetaAI\core\..\data\output_original_plus\ORIGINAL_PLUS_sample_data.xlsx
+   • Ground Truth: D:\Projects\AutoMetaAI\core\..\data\verification\Filled_Sample_Data_For_Verification.xlsx
+🎯 ACCURACY COMPARISON:
+Column                    Original   Original+  Difference
+------------------------------------------------------------
+➖ equipment                 50.0%      50.0%       0.0%
+➖ measureLocationName       28.6%      28.6%       0.0%
+➖ system                    70.6%      70.6%       0.0%
+➖ measureUnit               74.2%      74.2%       0.0%
+➖ subcomponentInstance      11.8%      11.8%       0.0%
+➖ subcomponentName          55.6%      55.6%       0.0%
+➖ address                    0.0%       0.0%       0.0%
+➖ equipmentName             44.1%      44.1%       0.0%
+➖ measureLocation           42.9%      42.9%       0.0%
+➖ component                 37.5%      37.5%       0.0%
+➖ equipmentInstance         88.2%      88.2%       0.0%
+➖ measureProperty           55.9%      55.9%       0.0%
+➖ systemName                70.6%      70.6%       0.0%
+➖ subcomponent              66.7%      66.7%       0.0%
+➖ systemInstance            97.1%      97.1%       0.0%
+➖ componentName             25.0%      25.0%       0.0%
+➖ componentInstance         97.1%      97.1%       0.0%
+➖ measureType               76.5%      76.5%       0.0%
+🔍 DETAILED ANALYSIS: What improved/regressed in Original+
+📈 POTENTIAL IMPROVEMENTS in Original+:
+   📊 measureLocation:
+      ✅ Correct: 'Inlet' for 'LP2 I/L STM PR-1'
+      ✅ Correct: 'Outlet' for 'ACW DISCH HDR PRESSUE'
+      Accuracy: 42.9%
+   📊 measureLocationName:
+      ✅ Correct: 'Inlet' for 'LP2 I/L STM PR-1'
+      ✅ Correct: 'Outlet' for 'ACW DISCH HDR PRESSUE'
+      Accuracy: 28.6%
+   📊 measureProperty:
+      Accuracy: 55.9%
+   📊 measureType:
+      Accuracy: 76.5%
+📉 POTENTIAL REGRESSIONS in Original+:
+      No major regressions detected
+📁 ORIGINAL PATTERN ANALYSIS:
+📊 measureLocation patterns:
+   Total patterns: 250
+   'O/L' → 'Outlet' (conf: 1.0)
+   'I/L' → 'Inlet' (conf: 0.892)
+   'DISCH' → 'Outlet' (conf: 1.0)
+   'PRESSUE' → 'Outlet' (conf: 1.0)
+   'O/L-L' → 'Outlet' (conf: 1.0)
+📊 measureLocationName patterns:
+   Total patterns: 236
+   'O/L' → 'Outlet' (conf: 1.0)
+   'I/L' → 'Inlet' (conf: 0.832)
+   'DISCH' → 'Outlet' (conf: 1.0)
+   'PRESSUE' → 'Outlet' (conf: 1.0)
+   'O/L-L' → 'Outlet' (conf: 1.0)
+📊 measureType patterns:
+   Total patterns: 626
+   'TEMP' → 'Temperature' (conf: 0.975)
+   'PRESS' → 'Pressure' (conf: 0.981)
+   'PRESSURE' → 'Pressure' (conf: 0.706)
+   'PRESSUE' → 'Pressure' (conf: 1.0)
+   'TEMP.' → 'Temperature' (conf: 1.0)
+📊 measureProperty patterns:
+   Total patterns: 637
+   'PRESSUE' → 'Cooling Water' (conf: 1.0)
+   'TEMPPT-26' → 'Metal' (conf: 1.0)
+   'O/L-L' → 'Steam' (conf: 1.0)
+   'O/L-R' → 'Steam' (conf: 1.0)
+   'TEMP-1' → 'Metal' (conf: 1.0)
+💡 FINAL ASSESSMENT: See if Original+ maintained or improved on 44.4% accuracy
+```
+
+Now, I want it have a selectable option like you or chatgpt have thinking mode and DeepSeek have deepthink similarly it will have a `thinking & improvement` mode means it will be able to think then verify using  the `verifier.py` and able to access and read the `verification` folder which holds the Ground truth for validation and do this iteratively and improves its accuracy by improving its conditions, logic, pattern, rules or relations recognition effectively and shows each iteration improvements, results and other in the terminal also.
+
+So, if you have any other questions or doubts then ask otherwise, Go!!!
